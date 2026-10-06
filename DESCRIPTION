@@ -1,0 +1,41 @@
+Package: delta.sharing
+Title: Client for the Delta Sharing Protocol
+Version: 0.2.1
+Authors@R: 
+  c(
+    person(given = "Zac",
+           family = "Davies",
+           role = c("aut", "cre"),
+           email = "zac@databricks.com"),
+    person(given = "Databricks",
+           role = "cph")
+  )
+Description: Connects R to 'Delta Sharing' servers for share discovery, table
+  metadata, snapshot reads, and change data feed reads.
+License: Apache License (>= 2)
+URL: https://zacdav-db.github.io/delta-sharing-r/,
+        https://github.com/zacdav-db/delta-sharing-r
+BugReports: https://github.com/zacdav-db/delta-sharing-r/issues
+Depends: R (>= 4.3.0)
+Encoding: UTF-8
+Imports: arrow, cli (>= 3.0.0), fs, httr2 (>= 1.2.0), jose, jsonlite,
+        nanoarrow (>= 0.8.0), openssl, purrr (>= 1.0.0), R6, rlang (>=
+        1.2.0), tibble
+Suggests: bit64, DBI, dplyr, duckdb, knitr, rmarkdown, testthat (>=
+        3.1.7), withr
+VignetteBuilder: knitr
+Config/Needs/check: rcmdcheck
+Config/Needs/coverage: covr
+Config/Needs/documentation: roxygen2
+Config/Needs/website: pkgdown
+Config/testthat/edition: 3
+Config/testthat/parallel: false
+RoxygenNote: 7.3.2
+SystemRequirements: Cargo (Rust's package manager), rustc (>= 1.88)
+NeedsCompilation: yes
+Packaged: 2026-09-25 05:09:28 UTC; runner
+Author: Zac Davies [aut, cre],
+  Databricks [cph]
+Maintainer: Zac Davies <zac@databricks.com>
+Repository: CRAN
+Date/Publication: 2026-10-06 07:40:21 UTC

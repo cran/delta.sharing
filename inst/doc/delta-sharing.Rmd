@@ -1,0 +1,159 @@
+---
+title: "Getting started"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+`delta.sharing` connects R to tables exposed through
+[Delta Sharing](https://delta.io/sharing/). A typical workflow is to create a
+client, select a table, describe a read, and choose the form of the result.
+
+## Try the public example data
+
+The Delta Sharing project hosts an open server that can be used without
+registering or creating a private credential:
+
+```{r, eval = FALSE}
+library(delta.sharing)
+
+client <- sharing_client(demo_profile())
+
+housing <- client$table("delta_sharing.default.boston-housing")
+housing$snapshot(
+  columns = c("chas", "medv"),
+  limit = 5
+)$to_tibble()
+```
+
+`demo_profile()` fetches the public profile maintained by the Delta Sharing
+project. The same client and table methods work with a private share.
+
+## Connect to your share
+
+Pass the path to a `.share` profile:
+
+```{r, eval = FALSE}
+client <- sharing_client("~/config.share")
+```
+
+`sharing_client()` also accepts a parsed profile list. See `?sharing_client`
+for the supported profile fields and authentication methods.
+
+## Find a table
+
+Use the client to discover the data available through its profile:
+
+```{r, eval = FALSE}
+client$list_shares()
+client$list_schemas("sales")
+client$list_tables("sales", "default")
+```
+
+These methods follow pagination automatically and return printable lists of
+records. Create a reusable table handle from a listed table:
+
+```{r, eval = FALSE}
+orders <- client$table("sales.default.orders")
+
+orders
+orders$version()
+orders$schema()
+```
+
+Creating a table handle does not read table rows. Its `protocol()` and
+`metadata()` methods expose additional table details.
+
+## Read a snapshot
+
+Configure the read with `snapshot()`, then materialize it. `to_tibble()` is the
+usual choice for R analysis:
+
+```{r, eval = FALSE}
+snapshot <- orders$snapshot(
+  columns = c("order_id", "status", "amount"),
+  limit = 1000
+)
+
+orders_tbl <- snapshot$to_tibble()
+```
+
+Snapshots can also target a table version or point in time:
+
+```{r, eval = FALSE}
+orders$snapshot(version = 42)$to_tibble()
+orders$snapshot(timestamp = "2024-01-01T00:00:00Z")$to_tibble()
+```
+
+Choose the materializer that matches the next consumer:
+
+| Result | Method |
+|---|---|
+| Tibble for ordinary R analysis | `to_tibble()` |
+| Base data frame | `to_data_frame()` |
+| In-memory Arrow table | `to_arrow()` |
+| Lazy Arrow reader, including for DuckDB | `to_arrow_reader()` |
+| Low-level Arrow C Stream | `to_arrow_stream()` |
+
+Arrow is a required dependency. The tibble and data-frame methods automatically
+convert BIGINT columns to `bit64::integer64`, including empty and nested results.
+A valid -9223372036854775808 raises a conversion error because bit64 reserves it
+for `NA`; Arrow materializers retain that value. Each materializer call performs
+a new read, so reuse the result when the same data is needed more than once.
+
+`columns` selects the returned columns and `limit` caps the number of returned
+rows. `predicate` accepts nested R lists that are sent to the sharing server as
+best-effort hints; predicates are not exact row filters. See `?SharingTable`
+for the complete snapshot options and predicate structure.
+
+## Read changes
+
+For a table with change data feed enabled, `changes()` reads an inclusive
+version or timestamp range:
+
+```{r, eval = FALSE}
+changes_tbl <- orders$changes(
+  starting_version = 120,
+  ending_version = 125,
+  columns = c(
+    "order_id",
+    "status",
+    "_change_type",
+    "_commit_version",
+    "_commit_timestamp"
+  )
+)$to_tibble()
+```
+
+`_change_type` distinguishes inserts, deletes, and the before and after rows of
+updates. The commit columns identify when each change was recorded. Change
+reads expose the same materializers as snapshots.
+
+## Downloads and caching
+
+Selected files are downloaded concurrently and cached for the R session. New
+handles for the same table reuse files already present in the cache, so
+overlapping reads may avoid downloading them again.
+
+The cache is stored under R's session temporary directory and normally needs no
+user management.
+
+See `vignette("performance-caching")` for cache identity and lifetime, cold and
+repeated reads, download concurrency, materializer costs, and Arrow batching.
+
+## Next steps
+
+See `?SharingTable`, `?SharingSnapshot`, and `?SharingChanges` for the complete
+read options. The
+[README](https://github.com/zacdav-db/delta-sharing-r#query-with-duckdb) shows
+how to query a shared table with DuckDB without first creating an R data frame.

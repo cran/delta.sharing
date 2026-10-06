@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Performance and caching</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Performance and caching</h1>
+
+
+
+<p>This guide explains how <code>delta.sharing</code> downloads and
+caches shared files, and how concurrency, materializer choice, and batch
+size affect reads. Start with <code>vignette(&quot;delta-sharing&quot;)</code> if
+you have not yet created a client and read a table.</p>
+<p>A read has two distinct phases: <strong>staging files</strong> and
+<strong>reading rows</strong>. The package writes the files selected by
+the sharing server directly to its disk-backed session cache before
+opening an Arrow stream; complete downloaded files are not held in R
+memory. Eager materializers can still exhaust RAM by collecting the scan
+output. A lazy Arrow reader avoids that collection, but it does not
+avoid staging or stream remote Parquet files directly from their signed
+URLs.</p>
+<div id="the-read-lifecycle" class="section level2">
+<h2>The read lifecycle</h2>
+<p>Every snapshot or change read follows the same broad path:</p>
+<ol style="list-style-type: decimal">
+<li>R requests the relevant file actions from the Delta Sharing
+server.</li>
+<li>Missing Parquet and deletion-vector files are downloaded into the
+table’s session cache.</li>
+<li>R writes a new local Delta log that points to the cached files.</li>
+<li>Delta Kernel scans the local files and emits Arrow batches.</li>
+<li>An eager materializer, when used, collects those batches into its
+result.</li>
+</ol>
+<p>The stages have different reuse behavior:</p>
+<table>
+<colgroup>
+<col width="27%" />
+<col width="36%" />
+<col width="36%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Work</th>
+<th align="right">Happens on another materializer call?</th>
+<th align="right">Reused from the session cache?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Sharing query and pagination</td>
+<td align="right">Yes</td>
+<td align="right">No</td>
+</tr>
+<tr class="even">
+<td>Download selected files</td>
+<td align="right">Only when missing or invalid</td>
+<td align="right">Yes</td>
+</tr>
+<tr class="odd">
+<td>Build the local Delta log</td>
+<td align="right">Yes</td>
+<td align="right">No</td>
+</tr>
+<tr class="even">
+<td>Delta Kernel scan</td>
+<td align="right">Yes</td>
+<td align="right">No</td>
+</tr>
+<tr class="odd">
+<td>Collect an eager result</td>
+<td align="right">Yes</td>
+<td align="right">No</td>
+</tr>
+</tbody>
+</table>
+<p>Reusing cached files avoids downloading them again, but each
+materializer call still performs the Sharing request, local log
+construction, Delta Kernel scan, and result collection.</p>
+</div>
+<div id="what-the-cache-contains" class="section level2">
+<h2>What the cache contains</h2>
+<p>Each table has a deterministic cache directory under R’s session
+temporary directory. Its identity includes the profile endpoint and the
+table’s share, schema, and name. New handles for the same table
+therefore share cached files, even when they use different download
+concurrency:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a>client <span class="ot">&lt;-</span> <span class="fu">sharing_client</span>(<span class="st">&quot;~/config.share&quot;</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" tabindex="-1"></a>orders <span class="ot">&lt;-</span> client<span class="sc">$</span><span class="fu">table</span>(<span class="st">&quot;sales.default.orders&quot;</span>, <span class="at">concurrency =</span> <span class="dv">4</span>)</span>
+<span id="cb1-4"><a href="#cb1-4" tabindex="-1"></a>faster_downloads <span class="ot">&lt;-</span> client<span class="sc">$</span><span class="fu">table</span>(<span class="st">&quot;sales.default.orders&quot;</span>, <span class="at">concurrency =</span> <span class="dv">8</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" tabindex="-1"></a><span class="fu">identical</span>(orders<span class="sc">$</span>cache_path, faster_downloads<span class="sc">$</span>cache_path)</span>
+<span id="cb1-7"><a href="#cb1-7" tabindex="-1"></a><span class="co">#&gt; TRUE</span></span></code></pre></div>
+<p>Snapshot and change data feed reads for the same table use this
+shared cache. When the server selects the same underlying file for both
+reads, its local copy is reused. Files that do not overlap are
+downloaded normally.</p>
+<p>The cache contains local copies of selected Parquet and
+deletion-vector files. Files are identified using immutable IDs supplied
+by the sharing server, so they can be reused even after a signed
+download URL changes. When the server provides a file size, the package
+checks it before reusing the cached file.</p>
+<p>Downloads are completed in temporary files before becoming available
+to the cache, so interrupted transfers are not reused. Cache directories
+and files are created with user-only permissions.</p>
+</div>
+<div id="cache-lifetime" class="section level2">
+<h2>Cache lifetime</h2>
+<p>The cache lasts for the R session, not for the lifetime of a table
+handle. It lives under <code>tempdir()</code>, R’s per-session temporary
+directory. It is normally removed when the session ends, but it is not
+durable storage: abnormal termination may leave files behind, and system
+temporary-directory policies may remove them during a long-running
+session. See <code>?tempdir</code> for how R chooses the directory.</p>
+<p>The cache is not persistent across sessions and does not contain
+materialized tibbles or Arrow tables.</p>
+<p>The read-only <code>cache_path</code> property is available for
+inspection:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>orders<span class="sc">$</span>cache_path</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>fs<span class="sc">::</span><span class="fu">dir_info</span>(orders<span class="sc">$</span>cache_path)</span></code></pre></div>
+<p>After all lazy readers and streams for the table have been closed,
+the directory can be removed to reclaim disk space:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>fs<span class="sc">::</span><span class="fu">dir_delete</span>(orders<span class="sc">$</span>cache_path)</span></code></pre></div>
+<p>The next read recreates the directory and downloads any required
+files. A long session that touches many large tables can retain
+substantial data, so <code>cache_path</code> is also useful for
+monitoring local disk usage.</p>
+</div>
+<div id="download-concurrency" class="section level2">
+<h2>Download concurrency</h2>
+<p>Set concurrency when creating a table handle:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>orders <span class="ot">&lt;-</span> client<span class="sc">$</span><span class="fu">table</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="st">&quot;sales.default.orders&quot;</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">concurrency =</span> <span class="dv">8</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>)</span></code></pre></div>
+<p>The default is four. <code>concurrency</code> controls the maximum
+number of missing files downloaded at once. It does not affect Sharing
+API pagination, Delta Kernel scanning, Arrow batch size, or reads whose
+files are already cached.</p>
+<p>Higher concurrency is most useful when a query selects many files and
+network latency leaves the connection idle. It may make little
+difference when there are few files, a single file saturates the
+connection, or the provider throttles requests. Benchmark representative
+uncached reads before increasing it.</p>
+<p>Interactive reads show progress for missing downloads. When every
+file has a known size, the display also shows the total bytes to
+download. Cache hits are not counted as downloads.</p>
+</div>
+<div id="shape-the-read-before-tuning-it" class="section level2">
+<h2>Shape the read before tuning it</h2>
+<p>Query options affect different stages:</p>
+<ul>
+<li><code>columns</code> reduces local scan and materialization work,
+but not network transfer or cache disk usage. The sharing server selects
+files before Delta Kernel applies the projection, and the complete
+selected Parquet files are downloaded.</li>
+<li><code>limit</code> is sent to the server as a hint and is enforced
+exactly by Delta Kernel. A provider may use the hint to return fewer
+files, but this is not guaranteed.</li>
+<li><code>predicate</code> is a best-effort server hint. It may improve
+file pruning, but it is not an exact row filter; apply an exact filter
+in the downstream consumer.</li>
+</ul>
+</div>
+<div id="choose-a-materializer" class="section level2">
+<h2>Choose a materializer</h2>
+<p>Materializers differ in how they consume Arrow batches:</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Collection behavior</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>to_tibble()</code></td>
+<td>Eager, in R memory</td>
+<td>Ordinary R analysis</td>
+</tr>
+<tr class="even">
+<td><code>to_data_frame()</code></td>
+<td>Eager, via the tibble path</td>
+<td>Base data-frame consumers</td>
+</tr>
+<tr class="odd">
+<td><code>to_arrow()</code></td>
+<td>Eager, in Arrow memory</td>
+<td>Repeated Arrow or DuckDB scans</td>
+</tr>
+<tr class="even">
+<td><code>to_arrow_reader()</code></td>
+<td>Lazy after file staging</td>
+<td>One-pass Arrow or DuckDB scan</td>
+</tr>
+<tr class="odd">
+<td><code>to_arrow_stream()</code></td>
+<td>Low-level and lazy after staging</td>
+<td>Arrow C Stream consumers</td>
+</tr>
+</tbody>
+</table>
+<p>Arrow is a required dependency. Eager R materializers use Arrow’s
+converter and return BIGINT columns as <code>bit64::integer64</code>.
+Close an Arrow reader when it is no longer needed, and release a
+low-level stream if its consumer does not take ownership.</p>
+<div id="query-larger-than-memory-results-with-duckdb" class="section level3">
+<h3>Query larger-than-memory results with DuckDB</h3>
+<p>When the analysis can be expressed in SQL, DuckDB is usually simpler
+than processing Arrow batches manually. DuckDB can spill
+larger-than-memory operations to disk, while <code>delta.sharing</code>
+keeps the selected source files in its disk-backed session cache. This
+requires the optional <code>DBI</code>, <code>duckdb</code>, and
+<code>withr</code> packages.</p>
+<p>Register a lazy Arrow reader so the full table is not first collected
+in R:</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>reader <span class="ot">&lt;-</span> orders<span class="sc">$</span><span class="fu">snapshot</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="at">columns =</span> <span class="fu">c</span>(<span class="st">&quot;status&quot;</span>, <span class="st">&quot;amount&quot;</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>)<span class="sc">$</span><span class="fu">to_arrow_reader</span>()</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>con <span class="ot">&lt;-</span> DBI<span class="sc">::</span><span class="fu">dbConnect</span>(duckdb<span class="sc">::</span><span class="fu">duckdb</span>())</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>duckdb<span class="sc">::</span><span class="fu">duckdb_register_arrow</span>(con, <span class="st">&quot;orders&quot;</span>, reader)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>summary <span class="ot">&lt;-</span> withr<span class="sc">::</span><span class="fu">with_options</span>(</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">arrow.use_threads =</span> <span class="cn">FALSE</span>),</span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>  DBI<span class="sc">::</span><span class="fu">dbGetQuery</span>(con, <span class="st">&quot;</span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="st">    SELECT</span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="st">      status,</span></span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="st">      count(*) AS orders,</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="st">      sum(amount) AS total_amount</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="st">    FROM orders</span></span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="st">    GROUP BY status</span></span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="st">    ORDER BY status</span></span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="st">  &quot;</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a>)</span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a></span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a>duckdb<span class="sc">::</span><span class="fu">duckdb_unregister_arrow</span>(con, <span class="st">&quot;orders&quot;</span>)</span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a>DBI<span class="sc">::</span><span class="fu">dbDisconnect</span>(con)</span></code></pre></div>
+<p>Let Arrow manage the registered reader’s lifetime. Calling
+<code>reader$Close()</code> directly can release its stream while the
+scanner is still reading ahead, including after a SQL query returns
+early (for example, with <code>LIMIT</code>).</p>
+<p>Arrow registration does not copy the full source into DuckDB. Only
+the final query result returned by <code>dbGetQuery()</code> is
+collected into R memory. Use SQL to filter or aggregate the data to a
+manageable result; collecting a very large final result can still
+exhaust R’s memory.</p>
+<p>The local Arrow option disables parallel scan execution; background
+read-ahead can still occur. DuckDB can execute the rest of the query in
+parallel.</p>
+<p>See DuckDB’s <a href="https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads#larger-than-memory-workloads-out-of-core-processing">larger-than-memory
+documentation</a> and its <a href="https://r.duckdb.org/reference/duckdb_register_arrow.html">Arrow
+registration reference</a> for details and current limitations.</p>
+</div>
+</div>
+<div id="arrow-batch-size" class="section level2">
+<h2>Arrow batch size</h2>
+<p><code>batch_size</code> controls the maximum number of rows emitted
+in each Arrow batch. The default is 65,536 rows. It does not control the
+number or size of downloaded files.</p>
+<p>Smaller batches can reduce peak memory while a batch is being
+processed, at the cost of more conversion and boundary overhead. Larger
+batches can reduce that overhead but use more memory. An eager
+materializer still collects every batch, so reducing
+<code>batch_size</code> does not make <code>to_tibble()</code>,
+<code>to_data_frame()</code>, or <code>to_arrow()</code> safe for a
+result larger than memory.</p>
+<p>Change the default only after measuring a representative
+workload.</p>
+</div>
+<div id="a-practical-tuning-order" class="section level2">
+<h2>A practical tuning order</h2>
+<ol style="list-style-type: decimal">
+<li>Use <code>columns</code> to reduce local scan and materialization
+work. Use <code>limit</code> and predicates as server-side pruning
+hints, while respecting their exact and best-effort semantics.</li>
+<li>Choose the execution path for the result size: eager R
+materialization when it fits comfortably in memory, or DuckDB for
+larger-than-memory SQL analytics.</li>
+<li>Reuse an existing result when the same data is needed again. Let the
+session cache handle overlapping reads automatically.</li>
+<li>If downloading uncached files is the bottleneck, compare a small
+number of concurrency values on a representative read.</li>
+<li>Tune <code>batch_size</code> last and only when measurements show
+batch overhead or memory pressure.</li>
+</ol>
+<p>Measure end-to-end elapsed time, peak memory, and cache disk usage.
+Network throughput, latency, provider behavior, file count, compression,
+schema width, query shape, and local hardware all affect performance, so
+there is no universally optimal configuration.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
